@@ -1,11 +1,16 @@
+#include <fstream> // For file handling (added)
 #include<iostream>
 #include<cstdlib>
 #include<stdio.h>
 #include<string>
 #include<iomanip>
+#include<limits>
+#define NOMINMAX
 #include<Windows.h>// for system related and cursor related 
 #include<conio.h>// for getch and kbhit
 #include<ctime>// for time related work like end the game if time ends
+
+
 
 using namespace std;
 const int ROWS = 30, COLS = 30;// global variables so every function can access them to increase readibility 
@@ -14,17 +19,20 @@ const int MAXasteroids = 15;
 const int lives = 3;
 
 void updateScoreAndLevel(int& score, int& level, int& lives, int& distance, int& timeremaining);
+void saveScoreToFile(const string& name, int score); // New function prototype (File Handling)
 void spanAsteroid(char gameMap[ROWS][COLS], int& asteroidCount);// movement functions
 void spanEnemy(char gameMap[ROWS][COLS], int& enemyCount);
 void moveEnemies(char gameMap[ROWS][COLS]);
 void EnemyShoot(char gameMap[ROWS][COLS]);
-void moveAsteroid(char gameMap[ROWS][COLS],int& lives);
+void moveAsteroid(char gameMap[ROWS][COLS], int& lives);
 void MoveEnemyBullet(char gameMap[ROWS][COLS], int& lives);
 void drawBoss(char gameMap[ROWS][COLS], int x, int y);
+void handleMultipleInputs(char gameMap[ROWS][COLS], int& shipx, int& shipy, int& shootCooldown);
+void spanPOWER(char gameMap[ROWS][COLS], int& power);// power up
+void movePower(char gameMap[ROWS][COLS], int& score);
 
 
-
-void Entername();
+void Entername(string& name);
 void SetCursorPosition(int x, int y);// function alternative for clear screen to avoid flickering and just update the game map 
 void gameMapinitialize(char gameMap[ROWS][COLS]);
 void displayMapOnce(char gameMap[ROWS][COLS], int& score, int& level);//display the map once
@@ -32,13 +40,13 @@ void redrawMap(char gameMap[ROWS][COLS]);
 void HideConsoleCursor();
 
 void level1(char gameMap[ROWS][COLS], int& shipx, int& shipy, int& score, int& level, int& lives);// level functions
-void level2(char gameMap[ROWS][COLS], int& shipx, int& shipy, int& score, int& level, int& lives);
+void level2(char gameMap[ROWS][COLS], int& shipx, int& shipy, int& score, int& level, int& lives, int& distance);
 
 void displayBossHealth(int& bosshealth);// game object
 void drawShip(char gameMap[ROWS][COLS], int& x, int& y);
 void shootBullet(char gameMap[ROWS][COLS], int& shipx, int& shipy);
 void clearShip(char gameMap[ROWS][COLS], int& x, int& y);
-void MoveBullet(char gameMap[ROWS][COLS], int& score);
+void MoveBullet(char gameMap[ROWS][COLS], int& score, int& enemyhealth);
 
 void mainMenu(int&);// main menu
 void Playgame();
@@ -47,6 +55,7 @@ void highScores();
 void invalid();
 void credit();
 void exit();
+void Endgame();
 
 int main()// main function 
 {
@@ -104,12 +113,96 @@ void mainMenu(int& a)
 	cout << setfill(' ') << setw(10) << " " << "5. QUIT " << endl << endl << endl;
 	cout << setfill(' ') << setw(10) << " " << "SELECT CHOICE (1 - 5) " << endl;
 	cout << setfill(' ') << setw(10) << " ";// to align the input with the menu
-	
-	cin >> a;// refrence variable for choice in main menu 
+
+	while (true) {
+		cin >> a;
+		if (cin.fail() || a < 1 || a > 5) {
+			// Clear the fail state and flush the buffer
+			cin.clear();
+			cin.ignore(numeric_limits<streamsize>::max(), '\n');
+			invalid();
+			return;
+		}
+		else {
+			cin.ignore(numeric_limits<streamsize>::max(), '\n');
+			break;
+		}
+	}
 
 	cout << setfill('=') << setw(60) << " " << endl;// last line of border
 	_getch();// stay on sceen for 2 second time 
 }
+
+
+
+// New Function: Save Score to File
+void saveScoreToFile(const string& name, int score) {
+	const int MAX_SCORES = 10;
+	string names[MAX_SCORES];
+	int scores[MAX_SCORES];
+	int currentScoreCount = 0;
+
+	// Read existing high scores
+	ifstream inputFile("HighScores.txt");
+	if (inputFile.is_open()) {
+		// Read names and scores from file
+		while (currentScoreCount < MAX_SCORES&& getline(inputFile, names[currentScoreCount])) {
+			if (!(inputFile >> scores[currentScoreCount])) break;
+			inputFile.ignore(); // Consume newline
+			currentScoreCount++;
+		}
+		inputFile.close();
+	}
+
+	// Find correct position for new score
+	int insertIndex = -1;
+	for (int i = 0; i < currentScoreCount; i++) {
+		if (score > scores[i]) {
+			insertIndex = i;
+			break;
+		}
+	}
+
+	// If new score is better, make room and insert
+	if (insertIndex != -1) {
+		// Shift lower scores down
+		for (int i = min(currentScoreCount, MAX_SCORES - 1); i > insertIndex; i--) {
+			names[i] = names[i - 1];
+			scores[i] = scores[i - 1];
+		}
+
+		// Insert new score
+		names[insertIndex] = name;
+		scores[insertIndex] = score;
+
+		// Increment count if not full
+		if (currentScoreCount < MAX_SCORES) {
+			currentScoreCount++;
+		}
+	}
+	// If list not full and score is lowest, append
+	else if (currentScoreCount < MAX_SCORES) {
+		names[currentScoreCount] = name;
+		scores[currentScoreCount] = score;
+		currentScoreCount++;
+	}
+
+	// Write back to file
+	ofstream outputFile("HighScores.txt");
+	if (outputFile.is_open()) {
+		for (int i = 0; i < currentScoreCount; i++) {
+			outputFile << names[i] << endl << scores[i] << endl;
+		}
+		outputFile.close();
+	}
+	else {
+		cerr << "Error: Unable to open HighScores.txt for writing!" << endl;
+	}
+}
+
+
+
+
 
 void instruction() {
 	system("CLS");
@@ -135,28 +228,65 @@ void instruction() {
 
 
 
-void highScores()
-{
+void highScores() {
 	system("CLS");
-	cout << setfill('=') << setw(60) << " " << endl;// initial lines 
+	cout << setfill('=') << setw(60) << " " << endl;
 	cout << setfill(' ') << left << setw(20) << " " << setw(15) << "HIGH SCORES" << endl;
 	cout << right << setfill('=') << setw(60) << " " << endl << endl;
-	/// //high scores 
-	cout << setfill(' ') << setw(10) << " " << "1. PLAY GAME " << endl;   // 
-	cout << setfill(' ') << setw(10) << " " << "2. INSTRUCTIONS " << endl;
-	cout << setfill(' ') << setw(10) << " " << "3. HIGH SCORES " << endl;
-	cout << setfill(' ') << setw(10) << " " << "4. PLAY GAME " << endl;   //
-	cout << setfill(' ') << setw(10) << " " << "5. INSTRUCTIONS " << endl;
-	cout << setfill(' ') << setw(10) << " " << "6. HIGH SCORES " << endl;
-	cout << setfill(' ') << setw(10) << " " << "7. INSTRUCTIONS " << endl;
-	cout << setfill(' ') << setw(10) << " " << "8. HIGH SCORES " << endl;
-	cout << setfill(' ') << setw(10) << " " << "9. INSTRUCTIONS " << endl;
-	cout << setfill(' ') << setw(10) << " " << "10. HIGH SCORES " << endl;
+
+	const int MAX_SCORES = 10;
+	string names[MAX_SCORES];
+	int scores[MAX_SCORES];
+	int currentScoreCount = 0;
+
+	ifstream file("HighScores.txt");
+	if (file.is_open()) {
+		// Read scores
+		while (currentScoreCount < MAX_SCORES && getline(file, names[currentScoreCount])) {
+			if (!(file >> scores[currentScoreCount])) break;
+			file.ignore(); // Consume newline
+			currentScoreCount++;
+		}
+		file.close();
+
+		// Manual bubble sort to order scores
+		for (int i = 0; i < currentScoreCount - 1; i++) {
+			for (int j = 0; j < currentScoreCount - i - 1; j++) {
+				if (scores[j] < scores[j + 1]) {
+					// Swap names
+					string tempName = names[j];
+					names[j] = names[j + 1];
+					names[j + 1] = tempName;
+
+					// Swap scores
+					int tempScore = scores[j];
+					scores[j] = scores[j + 1];
+					scores[j + 1] = tempScore;
+				}
+			}
+		}
+
+		// Display scores
+		if (currentScoreCount > 0) {
+			for (int i = 0; i < currentScoreCount; i++) {
+				cout << i + 1 << ". " << names[i] << " - " << scores[i] << endl;
+			}
+		}
+		else {
+			cout << "No high scores available yet!" << endl;
+		}
+	}
+	else {
+		cout << "No high scores available yet!" << endl;
+	}
 
 	cout << setfill('=') << setw(60) << " " << endl;
 	cout << setfill(' ') << setw(10) << " " << "Press any key to return to MAIN MENU ";
-	int a = _getch();
+	_getch();
 }
+
+
+
 
 
 
@@ -214,25 +344,27 @@ void exit()// exit function for game
 void Playgame() {
 	char gameMap[ROWS][COLS];
 	int score = 0, level = 1, lives = 3;
-
+	string playerName; // To store player's name
 	int spaceShipx = COLS / 2, spaceShipy = ROWS - 2; // Initial ship position
-	Entername();
+	Entername(playerName);
 	HideConsoleCursor();
 
 	// Level 1: Normal gameplay
 	level1(gameMap, spaceShipx, spaceShipy, score, level, lives);
 
-	// Transition to Level 2: Boss stage
-	if (lives > 0) { // Only proceed if the player has lives left
-		level2(gameMap, spaceShipx, spaceShipy, score, level, lives);
-	}
+
 
 	system("CLS");
 	if (lives > 0) {
 		cout << "Congratulations! You completed the game.\n";
+		saveScoreToFile(playerName, score);
 	}
 	else {
-		cout << "Game Over! Better luck next time.\n";
+
+
+		cout << "\t\t\n\nGAME OVER! SERGANT YOU RUN OUT OF LIVES TRY AGAIN .\t";
+		Sleep(3000);
+		saveScoreToFile(playerName, score);
 	}
 
 	Sleep(3000);
@@ -246,9 +378,8 @@ void Playgame() {
 
 
 
-void Entername() {
+void Entername(string& name) {
 	system("CLS");
-	string name;
 	cout << setfill('=') << setw(60) << " " << endl;
 	cout << setfill(' ') << left << setw(20) << " " << setw(15) << "Enter your name " << endl;
 	cout << right << setfill('=') << setw(60) << " " << endl << endl;
@@ -310,7 +441,7 @@ void displayMapOnce(char gameMap[ROWS][COLS], int& score, int& level) {
 		}
 		cout << endl;
 	}
-	//cout << setfill(' ') << setw(10) << "SCORE:" << score << setfill(' ') << setw(10) << "Level :" << level;
+
 
 }
 
@@ -339,6 +470,8 @@ void drawShip(char gameMap[ROWS][COLS], int& x, int& y)
 	gameMap[y][x - 1] = '<';
 	gameMap[y][x + 1] = '>';
 
+
+
 }
 
 
@@ -353,93 +486,135 @@ void clearShip(char gameMap[ROWS][COLS], int& x, int& y)
 
 
 
+void handleMultipleInputs(char gameMap[ROWS][COLS], int& shipx, int& shipy) {
+	static bool keyStates[256] = { false }; // Key state tracker
+
+	// Capture key presses
+	while (_kbhit()) {  // Allow for multiple keys to be registered
+		char key = _getch();
+		keyStates[key] = true; // Mark the key as pressed
+	}
+
+	// Movement Handling
+	if (keyStates['a'] && shipx > 2) { // Move left
+		clearShip(gameMap, shipx, shipy);
+		shipx--;
+		drawShip(gameMap, shipx, shipy);
+	}
+	if (keyStates['d'] && shipx < COLS - 3) { // Move right
+		clearShip(gameMap, shipx, shipy);
+		shipx++;
+		drawShip(gameMap, shipx, shipy);
+	}
+
+	// Shooting Handling
+	if (keyStates[' ']) { // Shoot
+		shootBullet(gameMap, shipx, shipy);
+	}
+
+	// Clear key states of keys that are no longer pressed
+	for (int i = 0; i < 256; ++i) {
+		if (GetAsyncKeyState(i) == 0) {  // Check if key is released
+			keyStates[i] = false;
+		}
+	}
+}
+
+
+
 
 
 
 void level1(char gameMap[ROWS][COLS], int& shipx, int& shipy, int& score, int& level, int& lives) {
 	time_t startTime = time(0);
-	const int  TIME_LIMIT = 90;
+	int TIME_LIMIT = 80;
 	int distance = 0;
 	int asteroidCount = 0;
 	int enemyCount = 0;
+	int powerCount = 0;
 	static int remainingTimelevel1;
+	int bosshealth = 20;
 	gameMapinitialize(gameMap);
-	displayMapOnce(gameMap, score, lives);// displays map for the first time mainly the boundary
-	drawShip(gameMap, shipx, shipy);//update  the space ship on to the map
-
+	displayMapOnce(gameMap, score, lives); // Display map for the first time
+	drawShip(gameMap, shipx, shipy); // Draw the player's ship
 
 	bool gameFlag = true;
-	while (gameFlag)
-	{
+	while (gameFlag) {
 
+		// **Time Calculations**
 		time_t currentTime = time(0);
 		int elapsedTime = (int)difftime(currentTime, startTime);
 		remainingTimelevel1 = TIME_LIMIT - elapsedTime;
-		distance = distance + 2;
+		distance += 2;
+
+		// **Update Game Info**
 		updateScoreAndLevel(score, level, lives, distance, remainingTimelevel1);
 
-
-
-		if (remainingTimelevel1 <= 0||lives==0) {
-			gameFlag = false; // Time is up, stop the game
+		// **End Conditions**
+		if (remainingTimelevel1 <= 0 || lives == 0) {
+			gameFlag = false; // End the game if time is up or player loses all lives
 			break;
 		}
 
+		// **Handle Player Input**
+		handleMultipleInputs(gameMap, shipx, shipy);
 
-		// Handle user input
-		if (_kbhit()) {
-			char key = _getch();
-
-			if (key == 'a' && shipx > 2) { // Move left if within bounds
-				clearShip(gameMap, shipx, shipy);
-				shipx--;
-				drawShip(gameMap, shipx, shipy);
-			}
-			else if (key == 'd' && shipx < COLS - 3) { // Move right if within bounds
-				clearShip(gameMap, shipx, shipy);
-				shipx++;
-				drawShip(gameMap, shipx, shipy);
-			}
-			else if (key == ' ') {
-				shootBullet(gameMap, shipx, shipy);
-			}
-			else if (key == 'q') { // Quit the game
-				gameFlag = false;
-				break;
-			}
-		}
-
+		// **Spawn Enemies and Asteroids**
 		if (enemyCount <= 10)
-		{
 			spanEnemy(gameMap, enemyCount);
-		}
 		if (asteroidCount <= 15)
-		{
 			spanAsteroid(gameMap, asteroidCount);
+		if (rand() % 20 == 10)
+		{
+			if (powerCount <= 10)
+				spanPOWER(gameMap, powerCount);
 		}
-
-		MoveBullet(gameMap, score);
+		// **Update Game Entities**
+		MoveBullet(gameMap, score, bosshealth);
 		EnemyShoot(gameMap);
 		moveEnemies(gameMap);
 		MoveEnemyBullet(gameMap, lives);
-
-		moveAsteroid(gameMap,lives);
+		moveAsteroid(gameMap, lives);
+		movePower(gameMap, score);
+		// **Redraw Map**
 		redrawMap(gameMap);
 
+		// **Frame Delay**
+		Sleep(160); // Control frame speed for playability
 
-		Sleep(160);
+		// **Level Complete Check**
+		if (score >= 450 || distance >= 2500) {
+			gameFlag = false; // End Level 1
+			cout << "Level Complete! Prepare for the Boss Stage...\n";
+			Sleep(2000); // Pause before transitioning
+		}
 	}
 
-	if (score >= 400)
+
+	if (lives < 0 || remainingTimelevel1 == 0)
+
 	{
-		gameFlag = false; // End Level 1
-		cout << "Level Complete! Prepare for the Boss Stage...\n";
-		Sleep(2000); // Pause before transitioning
+		Endgame();
 	}
-
-
-
+	else
+	{
+		level2(gameMap, shipx, shipy, score, level, lives, distance);
+	}
 }
+
+
+
+void Endgame()
+{
+
+	system("CLS");
+
+	cout << "\n\n\t\t  YOU LOST LOSER. YOU RUN OUT OF TIME TRY AGAIN.BE QUICK  \t";
+	Sleep(4000);
+	main();
+}
+
+
 
 
 
@@ -450,12 +625,42 @@ void redrawMap(char gameMap[ROWS][COLS]) {
 	SetCursorPosition(0, 0); // Reset cursor to the top-left
 	for (int i = 0; i < ROWS - 1; i++) {
 		for (int j = 0; j < COLS - 1; j++) {
-			cout << gameMap[i][j];
+			if (gameMap[i][j] == '^') {
+				cout << "\033[31m" << gameMap[i][j] << "\033[0m"; // Red for spaceship
+			}
+			else if (gameMap[i][j] == '<' || gameMap[i][j] == '>') {
+				cout << "\033[32m" << gameMap[i][j] << "\033[0m"; // Green for spaceship parts
+			}
+			else if (gameMap[i][j] == '@') { // Assuming 'A' represents enemies
+				std::cout << "\033[35m" << gameMap[i][j] << "\033[0m"; // magenta for asteroids
+			}
+			else if (gameMap[i][j] == '!') { // Assuming '!' represents enemies
+				cout << "\033[36m" << gameMap[i][j] << "\033[0m"; // Blue for enemie bullet
+			}
+			else if (gameMap[i][j] == '+') { // Assuming '+' represents enemies
+				cout << "\033[31m" << gameMap[i][j] << "\033[0m"; // red for our bullets
+			}
+			else if (gameMap[i][j] == 'E') { // Assuming 'E' represents enemies
+				cout << "\033[33m" << gameMap[i][j] << "\033[0m"; // yellow for enemies
+			}
+			else if (gameMap[i][j] == ':') { // Assuming ':' represents boss enemies
+				cout << "\033[32m" << gameMap[i][j] << "\033[0m"; // green for enemies
+			}
+			else if (gameMap[i][j] == '=') { // Assuming '=' represents boss enemies
+				cout << "\033[34m" << gameMap[i][j] << "\033[0m";
+			}
+			else if (gameMap[i][j] == '_') { // Assuming '_' represents boss enemies
+				cout << "\033[35m" << gameMap[i][j] << "\033[0m";
+			}
+			else {
+				cout << gameMap[i][j]; // Default for other characters
+			}
 		}
 		cout << endl;
 	}
-
 }
+
+
 
 
 
@@ -471,22 +676,31 @@ void updateScoreAndLevel(int& score, int& level, int& lives, int& distance, int&
 	SetCursorPosition(COLS + 5, 4); // Place distance display at a fixed location
 	cout << "Distance: " << distance << endl;
 	SetCursorPosition(COLS + 5, 5); // Place distance display at a fixed location
-	cout << "Time reamining " << timeremaining << endl;
+	cout << "Time remaining " << timeremaining << endl;
 	SetCursorPosition(0, 0);
 }
+
+
+
+
+
+
 
 void displayBossHealth(int& bosshealth)
 {
 	SetCursorPosition(COLS + 5, 6); // Place boss health display at a fixed location
-	cout << "Score: " << bosshealth;
+	cout << "BOSS HEALTH: " << bosshealth;
 }
+
+
+
 
 
 
 
 void spanEnemy(char gameMap[ROWS][COLS], int& enemyCount) {
 	while (true) {
-		int enemyx = rand() % 28;
+		int enemyx = rand() % 25;
 		int enemyy = rand() % 17;
 		if (enemyx == 0 || enemyy == 0)
 		{
@@ -507,15 +721,18 @@ void spanEnemy(char gameMap[ROWS][COLS], int& enemyCount) {
 
 
 
+
+
+
 void spanAsteroid(char gameMap[ROWS][COLS], int& asteroidCount)
 {
 
 	while (true) {
-		int asteroidx = rand() % 30;
-		int asteroidy = rand() % 20;
-		while (asteroidx == 0 || asteroidy == 0)
+		int asteroidx = rand() % 28;
+		int asteroidy = rand() % 18;
+		while (asteroidx == 1 || asteroidx == ROWS - 2)
 		{
-			asteroidx++;
+			asteroidx = asteroidx + 2;
 			asteroidy++;
 		}
 		if (gameMap[asteroidy][asteroidx] == ' ')
@@ -527,6 +744,30 @@ void spanAsteroid(char gameMap[ROWS][COLS], int& asteroidCount)
 		}
 	}
 }
+void spanPOWER(char gameMap[ROWS][COLS], int& power)// power up
+{
+
+	while (true) {
+		int powerx = rand() % 28;
+		int poweryy = rand() % 18;
+		while (powerx == 1 || powerx == ROWS - 2)
+		{
+			powerx = powerx + 2;
+			poweryy++;
+		}
+		if (gameMap[poweryy][powerx] == ' ')
+		{
+			SetCursorPosition(poweryy, powerx);
+			gameMap[poweryy][powerx] = '\"';
+			power++;
+			break;
+		}
+	}
+}
+
+
+
+
 
 
 
@@ -539,6 +780,9 @@ void shootBullet(char gameMap[ROWS][COLS], int& shipx, int& shipy)
 		gameMap[shipy - 1][shipx] = '+';
 	}
 }
+
+
+
 
 
 
@@ -577,7 +821,11 @@ void moveEnemies(char gameMap[ROWS][COLS])
 
 
 
-void moveAsteroid(char gameMap[ROWS][COLS],int& lives)
+
+
+
+
+void moveAsteroid(char gameMap[ROWS][COLS], int& lives)
 {
 	for (int i = ROWS; i >= 1; i--)
 	{
@@ -613,6 +861,7 @@ void moveAsteroid(char gameMap[ROWS][COLS],int& lives)
 					gameMap[i][j] = ' '; // Remove bullet
 					gameMap[i + 1][j] = ' '; // Clear ship part
 					lives--; // Reduce player's lives
+					Sleep(2000);
 				}
 				else if (i >= ROWS - 2)
 				{
@@ -625,18 +874,69 @@ void moveAsteroid(char gameMap[ROWS][COLS],int& lives)
 		}
 	}
 }
-
-
-
-
-
-
-void MoveBullet(char gameMap[ROWS][COLS], int& score)
+void movePower(char gameMap[ROWS][COLS], int& score)
 {
-	for (int i = 1; i < ROWS - 1; i++)
+	for (int i = ROWS - 1; i >= 1; i--)
 	{
 
 		for (int j = 1; j < COLS - 1; j++)
+		{
+			if (gameMap[i][j] == '\"')
+			{
+				if (gameMap[i + 1][j] == ' ' && i <= ROWS - 2)
+				{
+
+					gameMap[i][j] = ' ';
+					gameMap[i + 1][j] = '\"';
+
+				}
+				else if (gameMap[i + 1][j] == '\"' && i <= ROWS - 2)
+				{
+					gameMap[i][j] = ' ';
+					gameMap[i + 1][j] = ' ';
+
+				}
+				else if (gameMap[i + 1][j] == 'E')
+				{
+					gameMap[i][j] = ' ';
+					gameMap[i + 1][j] = ' ';
+				}
+				else if (gameMap[i + 1][j] == '+')
+				{
+					gameMap[i][j] = ' ';
+					gameMap[i + 1][j] = ' ';
+					score = score + 10;
+				}
+				else if (gameMap[i + 1][j] == '^' || gameMap[i + 1][j] == '<' || gameMap[i + 1][j] == '>') { // Hit the player's ship
+					gameMap[i][j] = ' '; // Remove bullet
+					gameMap[i + 1][j] = ' '; // Clear ship part
+					score = score + 10;; // Reduce player's lives
+
+				}
+				else if (i >= ROWS - 2)
+				{
+					gameMap[i][j] = ' ';
+					gameMap[1][j] = '\"';
+
+				}
+			}
+
+		}
+	}
+}
+
+
+
+
+
+
+
+
+void MoveBullet(char gameMap[ROWS][COLS], int& score, int& bosshealth)
+{
+	for (int i = 1; i < ROWS - 2; i++)
+	{
+		for (int j = 1; j < COLS - 2; j++)
 		{
 			if (gameMap[i][j] == '+')
 			{
@@ -645,27 +945,45 @@ void MoveBullet(char gameMap[ROWS][COLS], int& score)
 					gameMap[i][j] = ' ';
 					gameMap[i - 1][j] = '+';
 				}
-				else if (gameMap[i - 1][j] == 'E' || gameMap[i - 1][j] == '@')
+				else if (gameMap[i - 1][j] == 'E') // Hit Enemy
 				{
 					gameMap[i][j] = ' ';
 					gameMap[i - 1][j] = ' ';
-					score = score + 50;
+					score = score + 50; // Score for hitting enemy
+				}
+				else if (gameMap[i - 1][j] == '@') // Hit Asteroid
+				{
+					gameMap[i][j] = ' ';
+					gameMap[i - 1][j] = ' ';
+					score = score + 60; // Added score for hitting asteroid
 				}
 				else if (gameMap[i - 1][j] == '!')
 				{
 					gameMap[i][j] = ' ';
 					gameMap[i - 1][j] = ' ';
-
+				}
+				else if (gameMap[i - 1][j] == '_' || gameMap[i - 1][j] == ':' || gameMap[i - 1][j] == '-' || gameMap[i - 1][j] == '=')
+				{
+					gameMap[i][j] = ' ';
+					gameMap[i - 1][j] = ' ';
+					bosshealth--;
+					score += 50;
 				}
 				else if (i == 1)
 				{
 					gameMap[i][j] = ' ';
 				}
-
 			}
 		}
 	}
 }
+
+
+
+
+
+
+
 
 
 
@@ -681,7 +999,7 @@ void EnemyShoot(char gameMap[ROWS][COLS])
 			if (gameMap[i][j] == 'E') // Check for enemy
 			{
 				// Look below the enemy for a player's ship
-				for (int k = i + 1; k < ROWS; k++)
+				for (int k = i + 1; k < ROWS - 1; k++)
 				{
 					if (gameMap[k][j] == '^') // If a ship is below
 					{
@@ -696,6 +1014,9 @@ void EnemyShoot(char gameMap[ROWS][COLS])
 		}
 	}
 }
+
+
+
 
 
 
@@ -730,20 +1051,33 @@ void MoveEnemyBullet(char gameMap[ROWS][COLS], int& lives) {
 
 
 
+
+
+
 void drawBoss(char gameMap[ROWS][COLS], int x, int y) {
-	gameMap[y][x] = 'B';    // Boss center
-	gameMap[y][x - 1] = '<'; // Left wing
-	gameMap[y][x + 1] = '>'; // Right wing
+	gameMap[y][x] = '-';    // Boss center
+	gameMap[y][x - 1] = ':'; // Left wing
+	gameMap[y][x + 1] = ':'; // Right wing
+	gameMap[y - 1][x] = '_';
+	gameMap[y + 1][x] = '=';
+	gameMap[y - 1][x - 1] = ':';
+	gameMap[y - 1][x + 1] = ':';
 }
+
+
 
 
 
 
 void moveBoss(char gameMap[ROWS][COLS], int& x, int y, int& direction) {
 	// Clear current position
-	gameMap[y][x] = ' ';
-	gameMap[y][x - 1] = ' ';
-	gameMap[y][x + 1] = ' ';
+	gameMap[y][x] = ' ';    // Boss center
+	gameMap[y][x - 1] = ' '; // Left wing
+	gameMap[y][x + 1] = ' '; // Right wing
+	gameMap[y - 1][x] = ' ';
+	gameMap[y + 1][x] = ' ';
+	gameMap[y - 1][x - 1] = ' ';
+	gameMap[y - 1][x + 1] = ' ';
 
 	// Update position
 	if (x <= 2 || x >= COLS - 3) {
@@ -755,18 +1089,34 @@ void moveBoss(char gameMap[ROWS][COLS], int& x, int y, int& direction) {
 	drawBoss(gameMap, x, y);
 }
 
+
+
+
+
 void bossShoot(char gameMap[ROWS][COLS], int x, int y) {
-	if (gameMap[y + 1][x] == ' ') {
-		gameMap[y + 1][x] = '!';
+	if (gameMap[y + 2][x] == ' ') {       // Fire from the center
+		gameMap[y + 2][x] = '!';
+	}
+	if (gameMap[y + 1][x - 1] == ' ') {   // Fire from the left wing
+		gameMap[y + 1][x - 1] = '!';
+	}
+	if (gameMap[y + 1][x + 1] == ' ') {   // Fire from the right wing
+		gameMap[y + 1][x + 1] = '!';
 	}
 }
 
 
-void detectBossHit(char gameMap[ROWS][COLS], int x, int y, int& health, int& score) {
+
+
+
+void detectBossHit(char gameMap[ROWS][COLS], int x, int y, int& health, int& score)
+{
 	// Check boss's grid cells for bullets
-	if (gameMap[y][x] == '+' || gameMap[y][x - 1] == '+' || gameMap[y][x + 1] == '+') {
-		health--; // Reduce boss health
-		score += 100; // Increase score
+	if (gameMap[y][x] == '+' || gameMap[y][x - 1] == '+' || gameMap[y][x + 1] == '+')
+	{
+		health--;
+
+		cout << "Boss Hit! Health: " << health << ", Score: " << score << endl; // Debug statement
 		// Clear bullet
 		gameMap[y][x] = ' ';
 		gameMap[y][x - 1] = ' ';
@@ -776,90 +1126,121 @@ void detectBossHit(char gameMap[ROWS][COLS], int x, int y, int& health, int& sco
 
 
 
+void level2(char gameMap[ROWS][COLS], int& shipx, int& shipy, int& score, int& level, int& lives, int& distance) {
+	int bossHealth = 20;  // Boss requires 20 hits to defeat
+	int bossX = COLS / 2, bossY = 2;  // Initial boss position
+	int bossDirection = 1;  // 1 = right, -1 = left
+	int powerCount = 0;
+	time_t startTime = time(0);  // Start time of level boss
+	int TIME_LIMIT = 90;
 
-
-
-void level2(char gameMap[ROWS][COLS], int& shipx, int& shipy, int& score, int& level, int& lives) {
-	int bossHealth = 20; // Boss requires 20 hits to defeat
-	int bossX = COLS / 2, bossY = 2; // Initial boss position
-	int bossDirection = 1; // 1 = right, -1 = left
-	int bossShootTimer = 0; // Controls how often the boss fires
-
-	time_t startTime = time(0);// start time of level boss
-	const int  TIME_LIMIT = 90;
-	int distance = 0;
 	int asteroidCount = 0;
 	int enemyCount = 0;
 	static int remainingTimelevel2;
+
+	int frameCounter = 0;        // NEW: Frame counter to control boss fire rate
+	const int bossFireRate = 15; // NEW: Boss fires every 15 frames
+
 	gameMapinitialize(gameMap);
 	displayMapOnce(gameMap, score, lives);
-	drawShip(gameMap, shipx, shipy); // Draw player ship
-	updateScoreAndLevel(score, level, lives, distance, remainingTimelevel2);
+	drawShip(gameMap, shipx, shipy);  // Draw player ship
+	/*updateScoreAndLevel(score, level, lives, distance, remainingTimelevel2);*/
 	displayBossHealth(bossHealth);
-	//updateScoreAndLevel(score,level,lives,distance, int& timeremaining);
-	drawBoss(gameMap, bossX, bossY); // Draw boss on the map
+	drawBoss(gameMap, bossX, bossY);  // Draw boss on the map
 
+	bool keyStates[256] = { false };  // Track the state of each key
 	bool gameFlag = true;
-	while (gameFlag) {
+	int gameSpeed = 160;
+	while (gameFlag)
+	{
+		// **Time Calculations**
 		time_t currentTime = time(0);
 		int elapsedTime = (int)difftime(currentTime, startTime);
 		remainingTimelevel2 = TIME_LIMIT - elapsedTime;
-		distance = distance + 2;
 		updateScoreAndLevel(score, level, lives, distance, remainingTimelevel2);
+		distance += 2;
+
+
+
 		displayBossHealth(bossHealth);
-		// Handle user input for player ship
-		if (_kbhit()) {
+
+		// **Handle Multiple Inputs**
+		while (_kbhit()) {  // Allow for multiple keys to be registered
 			char key = _getch();
-			if (key == 'a' && shipx > 2) { // Move left
-				clearShip(gameMap, shipx, shipy);
-				shipx--;
-				drawShip(gameMap, shipx, shipy);
-			}
-			else if (key == 'd' && shipx < COLS - 3) { // Move right
-				clearShip(gameMap, shipx, shipy);
-				shipx++;
-				drawShip(gameMap, shipx, shipy);
-			}
-			else if (key == ' ') {
-				shootBullet(gameMap, shipx, shipy); // Fire a bullet
-			}
-			else if (key == 'q') { // Quit the game
-				gameFlag = false;
-				break;
-			}
+			keyStates[key] = true;  // Mark the key as pressed
 		}
 
-		// Move the boss
+		// Movement Handling
+		if (keyStates['a'] && shipx > 2) {  // Move left
+			clearShip(gameMap, shipx, shipy);
+			shipx--;
+			drawShip(gameMap, shipx, shipy);
+		}
+		if (keyStates['d'] && shipx < COLS - 3) {  // Move right
+			clearShip(gameMap, shipx, shipy);
+			shipx++;
+			drawShip(gameMap, shipx, shipy);
+		}
+
+		// Shooting Handling
+		if (keyStates[' ']) {  // Shoot
+			shootBullet(gameMap, shipx, shipy);
+		}
+
+		// Clear released keys
+		for (int i = 0; i < 256; ++i) {
+			if (GetAsyncKeyState(i) == 0) {  // Reset if the key is released
+				keyStates[i] = false;
+			}
+		}
+		if (enemyCount <= 3)
+			spanEnemy(gameMap, enemyCount);
+		if (asteroidCount <= 5)
+			spanAsteroid(gameMap, asteroidCount);
+		if (powerCount <= 7) {
+			if (rand() % 20 == 10)
+			{
+				if (powerCount <= 7)
+					spanPOWER(gameMap, powerCount);
+				gameSpeed = gameSpeed - 10;
+			}
+		}
+		// **Move the Boss**
 		moveBoss(gameMap, bossX, bossY, bossDirection);
 
-		// Handle boss shooting
-		bossShootTimer++;
-		if (bossShootTimer >= 10) { // Fire every 10 frames
+
+		// **Boss Shooting Based on Frame Rate**
+		if (frameCounter % bossFireRate == 0) {  // Boss fires every `bossFireRate` frames
 			bossShoot(gameMap, bossX, bossY);
-			bossShootTimer = 0;
 		}
 
-		// Move bullets and check for hits
-		MoveBullet(gameMap, score);
+		// **Move Bullets and Check for Hits**
+		MoveBullet(gameMap, score, bossHealth);
 		MoveEnemyBullet(gameMap, lives);
+		moveAsteroid(gameMap, lives);
+		moveEnemies(gameMap);
+		movePower(gameMap, score);
+		EnemyShoot(gameMap);
 		detectBossHit(gameMap, bossX, bossY, bossHealth, score);
 
-		// Check win/lose conditions
+
+
+		// **Check Win/Lose Conditions**
 		if (bossHealth <= 0) {
 			gameFlag = false;
-			cout << "You defeated the boss! Congratulations!\n";
+			cout << "\t\t\n\n You defeated the boss! Congratulations!\t";
 			break;
 		}
-		if (lives <= 0) {
+		if (lives <= 0 || remainingTimelevel2 <= 0) {
 			gameFlag = false;
 			cout << "Game Over! You ran out of lives.\n";
 			break;
 		}
 
-		// Redraw map
+		// **Redraw Map**
 		redrawMap(gameMap);
-		Sleep(160);
+		Sleep(gameSpeed);  // Frame delay
+
+		frameCounter++;  // Increment frame counter
 	}
 }
-
-
